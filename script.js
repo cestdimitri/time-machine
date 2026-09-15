@@ -1,9 +1,13 @@
 /* ============================================================
    Машина времени — логика
+   Тема оформления интерполируется непрерывно (HSL) между
+   периодами по мере движения ползунка — без резких переключений.
    ============================================================ */
 
 (function () {
   'use strict';
+
+  const root = document.documentElement;
 
   const els = {
     slider: document.getElementById('year-slider'),
@@ -11,33 +15,29 @@
     yearValue: document.getElementById('year-value'),
     agePill: document.getElementById('age-pill'),
     personName: document.getElementById('person-name'),
-    spanYears: document.getElementById('span-years'),
-    photoFrame: document.getElementById('photo-frame'),
+    scenePhoto: document.getElementById('scene-photo'),
     photo: document.getElementById('period-photo'),
-    photoPlaceholder: document.getElementById('photo-placeholder'),
+    photoFallback: document.getElementById('photo-fallback'),
     photoPlaceholderText: document.getElementById('photo-placeholder-text'),
     periodEmoji: document.getElementById('period-emoji'),
-    periodTitle: document.getElementById('period-title'),
+    periodTitleText: document.getElementById('period-title-text'),
     periodLocation: document.getElementById('period-location'),
     periodEvents: document.getElementById('period-events'),
+    finaleLine: document.getElementById('finale-line'),
     songMeta: document.getElementById('song-meta'),
     songEmbed: document.getElementById('song-embed'),
+    npToggle: document.getElementById('np-toggle'),
     playBtn: document.getElementById('play-btn'),
     playIcon: document.getElementById('play-icon'),
-    playLabel: document.getElementById('play-label'),
-    bgA: document.getElementById('bg-layer-a'),
-    bgB: document.getElementById('bg-layer-b'),
-    finale: document.getElementById('finale'),
-    finaleMessage: document.getElementById('finale-message'),
-    floaties: document.getElementById('floaties'),
   };
 
   let data = null;
-  let showingA = true;
+  let anchors = [];
   let playing = false;
-  let playTimer = null;
-  let finaleShown = false;
+  let rafId = null;
+  let lastRenderedYear = null;
   let currentSongKey = null;
+  let finaleShown = false;
 
   fetch('data.json', { cache: 'no-store' })
     .then((r) => {
@@ -50,24 +50,117 @@
     })
     .catch((err) => {
       console.error('Не удалось загрузить data.json', err);
-      document.querySelector('.console').innerHTML =
+      document.querySelector('.scene').innerHTML =
         '<p style="padding:24px;text-align:center;color:#a24;font-weight:700;">' +
         'Не получилось загрузить data.json.<br>Если вы открыли файл напрямую двойным кликом — ' +
         'запустите локальный сервер (см. README.md), браузеры блокируют fetch() для file://.' +
         '</p>';
     });
 
+  /* ---------------- цветовая интерполяция ---------------- */
+
+  function hexToHsl(hex) {
+    hex = hex.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16) / 255;
+    const g = parseInt(hex.substr(2, 2), 16) / 255;
+    const b = parseInt(hex.substr(4, 2), 16) / 255;
+    const max = Math.max(r, g, b),
+      min = Math.min(r, g, b);
+    let h,
+      s,
+      l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r:
+          h = (g - b) / d + (g < b ? 6 : 0);
+          break;
+        case g:
+          h = (b - r) / d + 2;
+          break;
+        default:
+          h = (r - g) / d + 4;
+      }
+      h /= 6;
+    }
+    return [h * 360, s * 100, l * 100];
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function lerpHsl(a, b, t) {
+    return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  }
+
+  function hslStr(hsl) {
+    return 'hsl(' + hsl[0].toFixed(1) + ' ' + hsl[1].toFixed(1) + '% ' + hsl[2].toFixed(1) + '%)';
+  }
+
+  function buildAnchors(json) {
+    return json.periods.map((p) => ({
+      year: (p.startYear + p.endYear) / 2,
+      c1: hexToHsl(p.colors[0]),
+      c2: hexToHsl(p.colors[1]),
+    }));
+  }
+
+  function themeAt(yearFloat) {
+    if (yearFloat <= anchors[0].year) return anchors[0];
+    const last = anchors[anchors.length - 1];
+    if (yearFloat >= last.year) return last;
+    for (let i = 0; i < anchors.length - 1; i++) {
+      const a = anchors[i],
+        b = anchors[i + 1];
+      if (yearFloat >= a.year && yearFloat <= b.year) {
+        const t = (yearFloat - a.year) / (b.year - a.year || 1);
+        return { c1: lerpHsl(a.c1, b.c1, t), c2: lerpHsl(a.c2, b.c2, t) };
+      }
+    }
+    return anchors[0];
+  }
+
+  function accentFrom(hsl) {
+    return [hsl[0], 68, 50];
+  }
+
+  function applyTheme(yearFloat) {
+    const theme = themeAt(yearFloat);
+    root.style.setProperty('--c1', hslStr(theme.c1));
+    root.style.setProperty('--c2', hslStr(theme.c2));
+    root.style.setProperty('--accent', hslStr(accentFrom(theme.c1)));
+    root.style.setProperty('--accent-2', hslStr(accentFrom(theme.c2)));
+  }
+
+  function buildSliderGradient(json) {
+    const total = json.endYear - json.startYear || 1;
+    const stops = [];
+    json.periods.forEach((p) => {
+      const posStart = (((p.startYear - json.startYear) / total) * 100).toFixed(1);
+      const posEnd = (((p.endYear - json.startYear) / total) * 100).toFixed(1);
+      stops.push(p.colors[0] + ' ' + posStart + '%');
+      stops.push(p.colors[1] + ' ' + posEnd + '%');
+    });
+    return 'linear-gradient(90deg, ' + stops.join(', ') + ')';
+  }
+
+  /* ---------------- инициализация ---------------- */
+
   function init(json) {
     els.personName.textContent = json.person.name;
-    els.spanYears.textContent = json.endYear - json.startYear;
-    els.finaleMessage.textContent = json.person.finalMessage;
 
     els.slider.min = json.startYear;
     els.slider.max = json.endYear;
     els.slider.value = json.startYear;
 
+    anchors = buildAnchors(json);
+    root.style.setProperty('--slider-track', buildSliderGradient(json));
+
     buildTicks(json);
-    spawnFloaties();
 
     render(json.startYear);
 
@@ -82,6 +175,11 @@
       } else {
         startPlaying();
       }
+    });
+
+    els.npToggle.addEventListener('click', () => {
+      const open = els.songEmbed.classList.toggle('open');
+      els.npToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
   }
 
@@ -98,12 +196,9 @@
       const span = document.createElement('span');
       span.className = 'tick';
       span.style.left = pct + '%';
-      span.style.position = 'absolute';
       span.textContent = y;
       els.ticks.appendChild(span);
     });
-    els.ticks.style.position = 'relative';
-    els.ticks.style.height = '16px';
   }
 
   function findPeriod(json, year) {
@@ -117,7 +212,6 @@
     const birth = new Date(birthDateStr);
     const birthYear = birth.getFullYear();
     if (year <= birthYear) return 0;
-    // День рождения в текущем году считаем уже наступившим (упрощённо)
     return year - birthYear;
   }
 
@@ -130,54 +224,60 @@
     return 'лет';
   }
 
+  /* ---------------- рендер ---------------- */
+
+  // полный рендер по целому году: тема + контент (используется при перетаскивании ползунка)
   function render(year) {
     if (!data) return;
     year = Math.max(data.startYear, Math.min(data.endYear, year));
     els.slider.value = year;
     els.yearValue.textContent = year;
+    applyTheme(year);
+    renderContent(year);
+    lastRenderedYear = year;
+  }
 
+  // только контент периода — вызывается лишь когда меняется целый год
+  function renderContent(year) {
     const birthYear = new Date(data.person.birthDate).getFullYear();
     if (year <= birthYear) {
       els.agePill.textContent = 'родилась ✨';
     } else {
       const age = calcAge(data.person.birthDate, year);
-      els.agePill.textContent = age + ' ' + pluralYears(age);
+      els.agePill.textContent = 'исполнилось ' + age + ' ' + pluralYears(age);
     }
 
     const period = findPeriod(data, year);
-    setBackground(period.colors);
 
     els.periodEmoji.textContent = period.emoji || '🕰️';
-    els.periodTitle.textContent = period.title;
+    els.periodTitleText.textContent = period.title;
     els.periodLocation.textContent = '📍 ' + period.location;
 
     els.periodEvents.innerHTML = '';
-    (period.events || []).forEach((ev, i) => {
+    (period.events || []).forEach((ev) => {
       const li = document.createElement('li');
       li.textContent = ev;
-      li.style.animationDelay = i * 0.06 + 's';
       els.periodEvents.appendChild(li);
     });
 
     setPhoto(period);
     setSong(period);
 
-    // финал
     if (year === data.endYear) {
+      els.finaleLine.textContent = data.person.finalMessage;
+      els.finaleLine.hidden = false;
       if (!finaleShown) {
         finaleShown = true;
-        els.finale.classList.add('show');
         burstConfetti();
       }
     } else {
+      els.finaleLine.hidden = true;
       finaleShown = false;
-      els.finale.classList.remove('show');
     }
   }
 
   function setPhoto(period) {
     els.photo.classList.remove('loaded');
-    els.photoPlaceholder.style.display = 'flex';
     const yearsLabel =
       period.startYear === period.endYear
         ? String(period.startYear)
@@ -188,15 +288,12 @@
 
     const img = new Image();
     img.onload = () => {
-      if (els.photoFrame.dataset.currentSrc !== period.photo) return; // устарело
+      if (els.scenePhoto.dataset.currentSrc !== period.photo) return; // устарело
       els.photo.src = period.photo;
       els.photo.classList.add('loaded');
-      els.photoPlaceholder.style.display = 'none';
     };
-    img.onerror = () => {
-      // оставляем плейсхолдер
-    };
-    els.photoFrame.dataset.currentSrc = period.photo;
+    img.onerror = () => {};
+    els.scenePhoto.dataset.currentSrc = period.photo;
     img.src = period.photo;
   }
 
@@ -208,10 +305,10 @@
       return;
     }
 
-    els.songMeta.textContent = song.title + ' — ' + song.artist + ' (' + song.year + ')';
+    els.songMeta.textContent = song.title + ' — ' + song.artist;
 
     const key = period.id;
-    if (currentSongKey === key) return; // не пересоздаём тот же embed
+    if (currentSongKey === key) return;
     currentSongKey = key;
 
     const isReal =
@@ -237,59 +334,58 @@
         'Виджет ещё не подключён. Найдите трек на ' +
         '<a href="https://music.yandex.ru/search?text=' +
         q +
-        '" target="_blank" rel="noopener">Яндекс.Музыке</a>, откройте его и через ' +
-        '«Поделиться → Код для вставки» скопируйте ID трека/альбома в data.json ' +
-        '(подробности в README.md).' +
+        '" target="_blank" rel="noopener">Яндекс.Музыке</a> и добавьте ID трека/альбома в data.json.' +
         '</div>';
     }
   }
 
-  function setBackground(colors) {
-    const nextLayer = showingA ? els.bgB : els.bgA;
-    const currLayer = showingA ? els.bgA : els.bgB;
-    nextLayer.style.background =
-      'linear-gradient(135deg, ' + colors[0] + ', ' + colors[1] + ')';
-    requestAnimationFrame(() => {
-      nextLayer.style.opacity = '1';
-      currLayer.style.opacity = '0';
-    });
-    showingA = !showingA;
-  }
+  /* ---------------- автопрокрутка ---------------- */
 
   function startPlaying() {
     if (!data) return;
     playing = true;
     els.playBtn.classList.add('playing');
     els.playIcon.textContent = '⏸';
-    els.playLabel.textContent = 'Остановить';
 
-    let year = data.startYear;
-    render(year);
-    const totalSteps = data.endYear - data.startYear;
-    const stepDelay = Math.max(120, Math.min(550, Math.round(7000 / Math.max(totalSteps, 1))));
+    const startYear = data.startYear;
+    const endYear = data.endYear;
+    const duration = Math.min(14000, Math.max(5000, (endYear - startYear) * 130));
+    let startTs = null;
 
-    playTimer = setInterval(() => {
-      year += 1;
-      if (year > data.endYear) {
-        stopPlaying();
-        return;
+    function frame(ts) {
+      if (!playing) return;
+      if (startTs === null) startTs = ts;
+      const t = Math.min(1, (ts - startTs) / duration);
+      const yearFloat = startYear + t * (endYear - startYear);
+
+      applyTheme(yearFloat);
+      els.slider.value = Math.round(yearFloat);
+      els.yearValue.textContent = Math.round(yearFloat);
+
+      const yearInt = Math.round(yearFloat);
+      if (yearInt !== lastRenderedYear) {
+        renderContent(yearInt);
+        lastRenderedYear = yearInt;
       }
-      render(year);
-      if (year === data.endYear) {
+
+      if (t < 1) {
+        rafId = requestAnimationFrame(frame);
+      } else {
+        render(endYear);
         stopPlaying();
       }
-    }, stepDelay);
+    }
+    rafId = requestAnimationFrame(frame);
   }
 
   function stopPlaying() {
     playing = false;
-    if (playTimer) {
-      clearInterval(playTimer);
-      playTimer = null;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
     }
     els.playBtn.classList.remove('playing');
     els.playIcon.textContent = '▶';
-    els.playLabel.textContent = 'В полёт по годам';
   }
 
   function burstConfetti() {
@@ -306,22 +402,6 @@
       piece.style.opacity = String(0.7 + Math.random() * 0.3);
       document.body.appendChild(piece);
       setTimeout(() => piece.remove(), (duration + 0.5) * 1000);
-    }
-  }
-
-  function spawnFloaties() {
-    const emojis = ['✨', '💗', '🎈', '🕊️', '💫'];
-    const count = 10;
-    for (let i = 0; i < count; i++) {
-      const f = document.createElement('span');
-      f.className = 'floaty';
-      f.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-      f.style.left = Math.random() * 100 + '%';
-      f.style.setProperty('--drift', Math.round((Math.random() - 0.5) * 120) + 'px');
-      const duration = 14 + Math.random() * 12;
-      f.style.animationDuration = duration + 's';
-      f.style.animationDelay = -(Math.random() * duration) + 's';
-      els.floaties.appendChild(f);
     }
   }
 })();

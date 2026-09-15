@@ -8,82 +8,68 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕰️</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Comfortaa:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <div class="bg-layer" id="bg-layer-a"></div>
-  <div class="bg-layer" id="bg-layer-b"></div>
-  <div class="bg-noise" aria-hidden="true"></div>
-  <div class="floaties" id="floaties" aria-hidden="true"></div>
+  <header class="brand">
+    <span class="brand-icon">🕰️</span>
+    <span class="brand-text">Машина времени <span class="brand-dot">·</span> <span id="person-name">Мама</span></span>
+  </header>
 
-  <div class="wrap">
+  <main class="scene" id="scene">
 
-    <header class="hero">
-      <div class="hero-badge">🕰️ <span>Машина времени</span></div>
-      <h1>С юбилеем, <span id="person-name">Мама</span>!</h1>
-      <p class="hero-sub">Потяни за ползунок — и пролети сквозь <span id="span-years">55</span> лет её жизни</p>
-    </header>
+    <div class="scene-photo" id="scene-photo">
+      <img id="period-photo" alt="" />
+      <div class="photo-fallback" id="photo-fallback">
+        <span class="fallback-blob fallback-blob-1"></span>
+        <span class="fallback-blob fallback-blob-2"></span>
+        <span class="fallback-icon">📷</span>
+        <span class="fallback-text" id="photo-placeholder-text">Добавьте фото этих лет</span>
+      </div>
+    </div>
 
-    <main class="console glass">
-
-      <div class="year-row">
-        <div class="year-display">
-          <span class="year-num" id="year-value">1971</span>
-          <span class="age-pill" id="age-pill">родилась</span>
-        </div>
-        <button class="play-btn" id="play-btn" type="button" aria-label="Запустить машину времени">
-          <span id="play-icon">▶</span> <span id="play-label">В полёт по годам</span>
-        </button>
+    <div class="scene-text">
+      <div class="year-block">
+        <span class="year-num" id="year-value">1971</span>
+        <span class="age-line" id="age-pill">родилась</span>
       </div>
 
-      <div class="slider-block">
-        <input type="range" id="year-slider" class="year-slider" min="1971" max="2026" step="1" value="1971"
-               aria-label="Выберите год">
-        <div class="slider-ticks" id="slider-ticks"></div>
-      </div>
+      <h2 class="period-title">
+        <span class="period-emoji" id="period-emoji">🍼</span>
+        <span id="period-title-text">Малышка</span>
+      </h2>
 
-      <div class="content-grid">
+      <p class="period-location" id="period-location">📍 —</p>
 
-        <section class="card photo-card glass" aria-label="Фотография периода">
-          <div class="photo-frame" id="photo-frame">
-            <img id="period-photo" alt="" />
-            <div class="photo-placeholder" id="photo-placeholder">
-              <span class="ph-icon">📷</span>
-              <span id="photo-placeholder-text">Добавьте фото этих лет</span>
-            </div>
-          </div>
-          <div class="period-caption">
-            <span class="period-emoji" id="period-emoji">🍼</span>
-            <span id="period-title">Малышка</span>
-          </div>
-        </section>
+      <ul class="period-events" id="period-events"></ul>
 
-        <section class="card info-card glass" aria-label="События периода">
-          <p class="location" id="period-location">📍 —</p>
-          <ul class="events" id="period-events"></ul>
-        </section>
+      <p class="finale-line" id="finale-line" hidden></p>
+    </div>
 
-        <section class="card music-card glass" aria-label="Музыка периода">
-          <h3 class="music-title">🎵 Хит тех лет</h3>
-          <p class="song-meta" id="song-meta">—</p>
-          <div class="song-embed" id="song-embed"></div>
-        </section>
+    <div class="now-playing" id="now-playing">
+      <button class="np-toggle" id="np-toggle" type="button" aria-expanded="false">
+        <span class="np-note">🎵</span>
+        <span class="np-text" id="song-meta">—</span>
+        <span class="np-caret">▾</span>
+      </button>
+      <div class="np-panel" id="song-embed"></div>
+    </div>
 
-      </div>
-    </main>
+  </main>
 
-    <section class="finale glass" id="finale">
-      <div class="finale-emoji">🎂✨🎉</div>
-      <p id="finale-message">С юбилеем!</p>
-    </section>
+  <footer class="timeline">
+    <button class="play-btn" id="play-btn" type="button" aria-label="Запустить машину времени">
+      <span id="play-icon">▶</span>
+    </button>
 
-    <footer class="footer">
-      сделано с любовью для лучшей мамы 💗
-    </footer>
-
-  </div>
+    <div class="slider-block">
+      <input type="range" id="year-slider" class="year-slider" min="1971" max="2026" step="1" value="1971"
+             aria-label="Выберите год">
+      <div class="slider-ticks" id="slider-ticks"></div>
+    </div>
+  </footer>
 
 <script src="script.js"></script>
 </body>
